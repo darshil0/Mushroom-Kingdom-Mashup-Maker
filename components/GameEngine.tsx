@@ -422,13 +422,49 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
         ctx.fillRect(e.x, e.y, e.w, e.h);
       }
 
-      // Player
+      // Player Rendering
       if (state.invincibilityTimer > 0 && Math.floor(Date.now() / 50) % 2 === 0) {
         ctx.globalAlpha = 0.4;
       }
       const charColor = CHARACTERS[character]?.color || '#ef4444';
       ctx.fillStyle = state.isClimbing ? '#fbbf24' : charColor;
-      ctx.fillRect(p.x, p.y, p.w, p.h);
+      
+      const drawPlayer = (x: number, y: number, w: number, h: number) => {
+        ctx.fillRect(x, y, w, h);
+        
+        // Draw Eyes to make direction/rotation visible
+        ctx.fillStyle = 'white';
+        const eyeSize = w * 0.15;
+        const lookDir = p.vx >= 0 ? 1 : -1;
+        
+        // Right/Front Eye
+        ctx.fillRect(x + w * 0.6 + (lookDir * w * 0.1), y + h * 0.2, eyeSize, eyeSize);
+        // Left/Back Eye
+        if (Math.abs(p.vx) < 0.1) {
+             ctx.fillRect(x + w * 0.2, y + h * 0.2, eyeSize, eyeSize);
+        }
+      };
+
+      if (!state.canJump && !state.isClimbing) {
+        // Spin Jump Animation
+        const spinSpeed = 0.4; // Radians per frame approx
+        const angle = (Date.now() / 100) % (Math.PI * 2);
+        
+        const cx = p.x + p.w / 2;
+        const cy = p.y + p.h / 2;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+        ctx.translate(-cx, -cy);
+        
+        drawPlayer(p.x, p.y, p.w, p.h);
+        
+        ctx.restore();
+      } else {
+        drawPlayer(p.x, p.y, p.w, p.h);
+      }
+
       ctx.globalAlpha = 1.0;
 
       ctx.restore();
