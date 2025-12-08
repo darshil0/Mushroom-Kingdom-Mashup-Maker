@@ -4,42 +4,273 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mushroom Kingdom Mashup Maker</title>
+    <meta name="description" content="AI-powered retro platformer level editor with Mario, Luigi, Toad & Peach abilities. Generate infinite levels with Gemini 2.5 Flash." />
+    
+    <!-- Open Graph & Twitter Cards -->
+    <meta property="og:title" content="Mushroom Kingdom Mashup Maker" />
+    <meta property="og:description" content="AI-powered retro platformer level editor" />
+    <meta property="og:image" content="https://mushroom-kingdom-mashup-maker.vercel.app/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    
+    <!-- Tailwind CSS v3.4.17 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Roboto:wght@400;700&display=swap');
-      body {
-        font-family: 'Roboto', sans-serif;
-        overflow: hidden; /* Prevent scrolling during play */
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              retro: ['"Press Start 2P"', 'cursive'],
+              mono: ['"Roboto Mono"', 'monospace'],
+              sans: ['Roboto', 'sans-serif']
+            },
+            animation: {
+              'spin-slow': 'spin 1s linear infinite',
+              'pulse-glow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'bounce-slow': 'bounce 2s infinite'
+            },
+            colors: {
+              'mario-red': '#e3342f',
+              'luigi-green': '#38a169',
+              'peach-pink': '#f687b3',
+              'toad-blue': '#4299e1'
+            }
+          }
+        }
       }
+    </script>
+
+    <!-- Optimized Google Fonts (Preload Critical) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Press+Start+2P:wght@400&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P:wght@400&family=Roboto:ital,wght@0,400;0,700;1,400&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    </noscript>
+
+    <!-- PWA Manifest & Icons -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍄</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍄</text></svg>">
+    <meta name="theme-color" content="#ef4444">
+
+    <style>
+      /* Critical CSS (Above the fold) */
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Roboto', sans-serif;
+        background: linear-gradient(135deg, #1e1b4b 0%, #2d1b69 50%, #1e3c72 100%);
+        min-height: 100vh;
+        overscroll-behavior: none;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        touch-action: manipulation;
+      }
+      
       .font-retro {
         font-family: 'Press Start 2P', cursive;
+        text-shadow: 
+          0.07em 0 0 rgba(0,0,0,0.8),
+          0 0.07em 0 rgba(0,0,0,0.8),
+          0.07em 0.07em 0 rgba(0,0,0,0.8);
+        image-rendering: pixelated;
+        image-rendering: -moz-crisp-edges;
       }
-      /* Custom Scrollbar for editor */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+
+      /* Optimized Scrollbar */
+      ::-webkit-scrollbar { 
+        width: 6px; height: 6px; 
+        background: transparent;
       }
-      ::-webkit-scrollbar-track {
-        background: #1a202c; 
+      ::-webkit-scrollbar-track { 
+        background: rgba(26, 32, 44, 0.3);
+        border-radius: 3px;
       }
-      ::-webkit-scrollbar-thumb {
-        background: #4a5568; 
-        border-radius: 4px;
+      ::-webkit-scrollbar-thumb { 
+        background: linear-gradient(45deg, #4a5568, #718096);
+        border-radius: 3px;
+        min-height: 20px;
+      }
+      ::-webkit-scrollbar-thumb:hover { 
+        background: linear-gradient(45deg, #4299e1, #3182ce);
+      }
+
+      /* Canvas Optimizations */
+      canvas {
+        display: block;
+        image-rendering: pixelated;
+        image-rendering: -moz-crisp-edges;
+        image-rendering: crisp-edges;
+      }
+      canvas:focus { 
+        outline: 3px solid #60a5fa; 
+        outline-offset: 3px; 
+      }
+
+      /* Loading Screen (60fps optimized) */
+      .loading-screen {
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(circle at center, #1e40af 0%, #1e1b4b 70%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.3s ease;
+      }
+      
+      /* Mobile Optimizations */
+      @media (hover: none) and (pointer: coarse) {
+        body { 
+          cursor: default; 
+          -webkit-tap-highlight-color: transparent;
+        }
+        button { 
+          -webkit-tap-highlight-color: transparent; 
+        }
+      }
+
+      /* High DPI Displays */
+      @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+        canvas { image-rendering: pixelated; }
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "@testing-library/react": "https://aistudiocdn.com/@testing-library/react@^16.3.0"
-  }
-}
-</script>
-</head>
+
+    <!-- Production-Ready Import Map -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@18.3.1?bundle&external=react-dom",
+          "react-dom": "https://esm.sh/react-dom@18.3.1?bundle&external=react",
+          "@google/generative-ai": "https://esm.sh/@google/generative-ai@0.23.0",
+          "three": "https://esm.sh/three@0.165.0?bundle"
+        }
+      }
+    </script>
+  </head>
+
   <body>
+    <!-- Loading Screen with Progress -->
+    <div class="loading-screen" id="loading-screen">
+      <div class="text-6xl mb-8 animate-bounce-slow">🍄</div>
+      <div class="font-retro text-3xl md:text-4xl text-white mb-6 tracking-wider drop-shadow-lg">
+        Mushroom Kingdom
+      </div>
+      <div class="w-20 h-20 border-4 border-white/20 border-t-white/80 rounded-full animate-spin-slow mb-8 shadow-2xl"></div>
+      <div class="flex items-center gap-4 mb-8">
+        <div class="w-64 bg-white/10 rounded-full h-3 overflow-hidden">
+          <div id="progress-bar" class="bg-gradient-to-r from-emerald-400 to-teal-500 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <span id="progress-text" class="font-mono text-white/80 text-sm min-w-[3rem]">0%</span>
+      </div>
+      <p class="text-white/70 text-sm font-mono tracking-wide">Powered by Gemini 2.5 Flash</p>
+    </div>
+
+    <!-- App Root -->
     <div id="root"></div>
+
+    <!-- Production Error Boundary + Analytics -->
+    <script>
+      // Enhanced Error Handling
+      const loadingScreen = document.getElementById('loading-screen');
+      const root = document.getElementById('root');
+      
+      // Progressive Loading
+      let loadProgress = 0;
+      const progressBar = document.getElementById('progress-bar');
+      const progressText = document.getElementById('progress-text');
+      
+      function updateProgress() {
+        loadProgress = Math.min(loadProgress + 15, 95);
+        if (progressBar) progressBar.style.width = loadProgress + '%';
+        if (progressText) progressText.textContent = Math.round(loadProgress) + '%';
+      }
+      
+      // Simulate asset loading
+      updateProgress();
+      setTimeout(updateProgress, 300);
+      setTimeout(updateProgress, 800);
+
+      window.addEventListener('error', (event) => {
+        if (loadingScreen) loadingScreen.remove();
+        showErrorScreen(event.error?.message || 'Something went wrong');
+        event.preventDefault();
+        return true;
+      });
+
+      window.addEventListener('unhandledrejection', (event) => {
+        if (loadingScreen) loadingScreen.remove();
+        showErrorScreen(event.reason?.message || 'Promise rejected');
+        event.preventDefault();
+        return true;
+      });
+
+      function showErrorScreen(message) {
+        document.body.innerHTML = `
+          <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-500 via-red-600 to-red-700 p-8">
+            <div class="max-w-lg bg-white/10 backdrop-blur-xl rounded-3xl p-12 border border-white/20 text-center shadow-2xl">
+              <div class="text-8xl mb-8 animate-pulse">💥</div>
+              <h1 class="font-retro text-4xl md:text-5xl text-white mb-6 drop-shadow-lg">Game Over!</h1>
+              <p class="text-white/90 mb-8 font-mono text-lg leading-relaxed">${message}</p>
+              <div class="space-y-4">
+                <button onclick="location.reload()" 
+                        class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 px-8 rounded-2xl transition-all duration-300 font-retro text-xl shadow-xl hover:shadow-2xl hover:-translate-y-1">
+                  🔄 Reload Game
+                </button>
+                <a href="https://github.com/yourusername/mushroom-kingdom-mashup-maker/issues/new" 
+                   target="_blank" rel="noopener"
+                   class="block text-white/70 hover:text-white font-mono text-sm underline decoration-wavy">
+                  Report Bug
+                </a>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // PWA Install Prompt
+      let deferredPrompt;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        // Show install button after app loads
+        setTimeout(() => {
+          if (deferredPrompt) {
+            // Trigger install UI (handled in React app)
+            window.dispatchEvent(new CustomEvent('appinstallprompt'));
+          }
+        }, 2000);
+      });
+
+      // Performance Monitoring
+      if ('PerformanceObserver' in window) {
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) {
+            if (entry.entryType === 'largest-contentful-paint') {
+              // Track LCP for optimization
+              console.log('LCP:', entry.startTime);
+            }
+          }
+        }).observe({ entryTypes: ['largest-contentful-paint'] });
+      }
+
+      // Remove loading screen when React mounts
+      const observer = new MutationObserver(() => {
+        if (root.children.length > 0) {
+          setTimeout(() => {
+            if (loadingScreen) {
+              loadingScreen.style.opacity = '0';
+              setTimeout(() => loadingScreen.remove(), 300);
+            }
+          }, 500);
+          observer.disconnect();
+        }
+      });
+      observer.observe(root, { childList: true });
+    </script>
+    <script type="module" src="./src/main.jsx"></script>
   </body>
 </html>
