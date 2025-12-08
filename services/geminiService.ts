@@ -46,8 +46,14 @@ export const generateLevel = async (prompt: string) => {
       }
     });
 
-    const text = response.text;
+    let text = response.text;
     if (!text) throw new Error("No response from AI");
+    
+    // Cleanup Markdown code blocks if present (Gemini sometimes adds them despite mimeType)
+    text = text.trim();
+    if (text.startsWith("```")) {
+      text = text.replace(/^```(json)?/, "").replace(/```$/, "");
+    }
     
     return JSON.parse(text);
   } catch (error) {

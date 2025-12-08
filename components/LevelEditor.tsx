@@ -15,6 +15,7 @@ export const LevelEditor: React.FC<LevelEditorProps> = ({ level, setLevel }) => 
   const [selectedTool, setSelectedTool] = useState<Tool>(TileType.Ground);
   const [isPanning, setIsPanning] = useState(false);
   const [isPainting, setIsPainting] = useState(false);
+  const [hoverPos, setHoverPos] = useState({ c: -1, r: -1 });
   const lastMouse = useRef({ x: 0, y: 0 });
 
   // Draw Loop
@@ -38,10 +39,10 @@ export const LevelEditor: React.FC<LevelEditorProps> = ({ level, setLevel }) => 
     ctx.fillStyle = '#2d3748'; // Gray-800
     ctx.fillRect(0, 0, EDITOR_COLS * TILE_SIZE, EDITOR_ROWS * TILE_SIZE);
 
-    // Draw Grid Lines (Optional, faint)
+    // Draw Grid Lines
     ctx.beginPath();
     ctx.strokeStyle = '#4a5568';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1 / camera.zoom; // Keep lines thin regardless of zoom
     for (let c = 0; c <= EDITOR_COLS; c++) {
       ctx.moveTo(c * TILE_SIZE, 0);
       ctx.lineTo(c * TILE_SIZE, EDITOR_ROWS * TILE_SIZE);
@@ -66,13 +67,13 @@ export const LevelEditor: React.FC<LevelEditorProps> = ({ level, setLevel }) => 
     level.entities.forEach(e => {
       ctx.fillStyle = ENTITY_COLORS[e.type] || '#fff';
       if (e.type === EntityType.Goal) ctx.fillStyle = 'yellow';
-      if (e.type === EntityType.Goomba) ctx.fillStyle = '#7f1d1d'; // darker red
+      if (e.type === EntityType.Goomba) ctx.fillStyle = '#7f1d1d';
       
       ctx.fillRect(e.x, e.y, e.w, e.h);
       
       // Border for visibility
       ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2 / camera.zoom;
       ctx.strokeRect(e.x, e.y, e.w, e.h);
     });
 
@@ -80,20 +81,31 @@ export const LevelEditor: React.FC<LevelEditorProps> = ({ level, setLevel }) => 
     ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
     ctx.fillRect(level.startPos.x * TILE_SIZE, level.startPos.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
     ctx.strokeStyle = '#00ff00';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 / camera.zoom;
     ctx.strokeRect(level.startPos.x * TILE_SIZE, level.startPos.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    
     ctx.fillStyle = 'white';
-    ctx.font = '10px Arial';
-    ctx.fillText('START', level.startPos.x * TILE_SIZE + 2, level.startPos.y * TILE_SIZE + 20);
+    ctx.font = `${10 / camera.zoom}px Arial`;
+    // We adjust text position slightly based on zoom to keep it readable
+    ctx.fillText('START', level.startPos.x * TILE_SIZE, level.startPos.y * TILE_SIZE - 2);
 
     // Draw World Border
-    ctx.strokeStyle = '#red';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#f87171'; // Red-400
+    ctx.lineWidth = 2 / camera.zoom;
     ctx.strokeRect(0, 0, EDITOR_COLS * TILE_SIZE, EDITOR_ROWS * TILE_SIZE);
+
+    // Draw Hover Cursor
+    if (hoverPos.c >= 0 && hoverPos.r >= 0 && hoverPos.c < EDITOR_COLS && hoverPos.r < EDITOR_ROWS) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.fillRect(hoverPos.c * TILE_SIZE, hoverPos.r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 2 / camera.zoom;
+      ctx.strokeRect(hoverPos.c * TILE_SIZE, hoverPos.r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
 
     ctx.restore();
 
-  }, [level, camera]);
+  }, [level, camera, hoverPos]);
 
   const getGridPos = (e: React.MouseEvent | React.WheelEvent) => {
     const canvas = canvasRef.current;
@@ -110,7 +122,7 @@ export const LevelEditor: React.FC<LevelEditorProps> = ({ level, setLevel }) => 
 
     const c = Math.floor(worldX / TILE_SIZE);
     const r = Math.floor(worldY / TILE_SIZE);
-    return { c, r };
+    return { c, r, mx, my, worldX, worldY };
   };
 
   const handlePaint = (c: number, r: number) => {
@@ -146,8 +158,6 @@ export const LevelEditor: React.FC<LevelEditorProps> = ({ level, setLevel }) => 
     if (typeof selectedTool === 'number') { // TileType is enum number
        newLevel.grid = [...level.grid];
        newLevel.grid[idx] = selectedTool;
-       // Optional: Clear entities on solid blocks? 
-       // Keeping them allows putting coins inside blocks conceptually, though physics might be weird.
        setLevel(newLevel);
        return;
     }
@@ -172,7 +182,6 @@ export const LevelEditor: React.FC<LevelEditorProps> = ({ level, setLevel }) => 
           vx: 0, 
           vy: 0
         };
-        // Special logic for Goal (ensure only one?) - keeping multiple goals is fun though.
         newLevel.entities = [...level.entities, newEntity];
         setLevel(newLevel);
       }
@@ -191,6 +200,12 @@ export const LevelEditor: React.FC<LevelEditorProps> = ({ level, setLevel }) => 
   };
 
   const onMouseMove = (e: React.MouseEvent) => {
+    // Hover effect
+    const { c, r } = getGridPos(e);
+    if (c !== hoverPos.c || r !== hoverPos.r) {
+      setHoverPos({ c, r });
+    }
+
     if (isPanning) {
       const dx = e.clientX - lastMouse.current.x;
       const dy = e.clientY - lastMouse.current.y;
@@ -198,7 +213,6 @@ export const LevelEditor: React.FC<LevelEditorProps> = ({ level, setLevel }) => 
       lastMouse.current = { x: e.clientX, y: e.clientY };
     }
     if (isPainting) {
-      const { c, r } = getGridPos(e);
       handlePaint(c, r);
     }
   };
@@ -209,9 +223,18 @@ export const LevelEditor: React.FC<LevelEditorProps> = ({ level, setLevel }) => 
   };
 
   const onWheel = (e: React.WheelEvent) => {
+    // Zoom towards mouse cursor
+    const { mx, my, worldX, worldY } = getGridPos(e);
     const zoomSpeed = 0.001;
-    const newZoom = Math.max(0.5, Math.min(3, camera.zoom - e.deltaY * zoomSpeed));
-    setCamera(prev => ({ ...prev, zoom: newZoom }));
+    const delta = -e.deltaY * zoomSpeed;
+    const newZoom = Math.max(0.5, Math.min(3, camera.zoom + delta));
+
+    // Calculate new camera offset to keep worldX, worldY under mx, my
+    // mx = worldX * newZoom + newCameraX
+    const newCameraX = mx - worldX * newZoom;
+    const newCameraY = my - worldY * newZoom;
+
+    setCamera({ x: newCameraX, y: newCameraY, zoom: newZoom });
   };
 
   return (
@@ -274,7 +297,6 @@ const ToolButton = ({ label, active, onClick, color }: any) => (
   </button>
 );
 
-// Simple brightness checker for text color
 const isLight = (color: string) => {
   if (color === 'yellow' || color === 'gold' || color === 'lime' || color === '#fbbf24') return true;
   return false;
