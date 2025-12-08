@@ -1,5 +1,6 @@
 # Mushroom Kingdom Mashup Maker
 
+**Repository Name**: `mushroom-kingdom-mashup-maker`  
 **Description**: A React-based retro platformer and level editor featuring AI level generation and unique character abilities.
 
 ## Features

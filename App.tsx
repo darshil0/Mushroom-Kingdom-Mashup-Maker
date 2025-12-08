@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { GameEngine } from './components/GameEngine';
+import { LevelEditor } from './components/LevelEditor';
 import { LevelData, CharacterType } from './types';
-import { INITIAL_LEVEL_GRID, EDITOR_COLS, EDITOR_ROWS, TILE_COLORS, TILE_SIZE } from './constants';
+import { INITIAL_LEVEL_GRID, EDITOR_COLS, EDITOR_ROWS } from './constants';
 import { generateLevel } from './services/geminiService';
 import { parseLevelLayout } from './utils/levelParser';
 
@@ -54,7 +55,7 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-800 p-4 flex flex-col items-center">
-      <header className="w-full max-w-4xl flex justify-between items-center mb-4">
+      <header className="w-full max-w-5xl flex justify-between items-center mb-4">
         <h1 className="text-2xl text-white font-retro text-shadow">Mushroom Maker</h1>
         <div className="flex gap-2">
           <select
@@ -81,35 +82,9 @@ const App = () => {
         </div>
       </header>
 
-      {/* Level Preview (Static) */}
-      <div className="bg-gray-900 border-4 border-gray-600 rounded overflow-hidden mb-6 relative shadow-2xl">
-        <div className="grid" style={{
-          gridTemplateColumns: `repeat(${EDITOR_COLS}, 10px)`,
-          width: EDITOR_COLS * 10,
-          height: EDITOR_ROWS * 10
-        }}>
-          {level.grid.map((tile, i) => (
-            <div key={i} style={{ backgroundColor: TILE_COLORS[tile] }} />
-          ))}
-        </div>
-        {/* Render Entity Previews */}
-        {level.entities.map(e => (
-          <div key={e.id} className="absolute rounded-full opacity-50"
-            style={{
-              left: (e.x / TILE_SIZE) * 10, // Scale TILE_SIZE px tile to 10px preview
-              top: (e.y / TILE_SIZE) * 10,
-              width: 10, height: 10,
-              backgroundColor: e.type === 'goal' ? 'yellow' : 'red'
-            }}
-          />
-        ))}
-        <div className="absolute bg-green-400 rounded-full border border-white"
-          style={{
-            left: level.startPos.x * 10,
-            top: level.startPos.y * 10,
-            width: 10, height: 10
-          }}
-        />
+      {/* Editor Component */}
+      <div className="mb-6 w-full flex justify-center">
+        <LevelEditor level={level} setLevel={setLevel} />
       </div>
 
       {/* AI Controls */}
@@ -136,16 +111,15 @@ const App = () => {
 
       {/* Instructions */}
       <div className="mt-8 text-gray-300 max-w-xl text-sm bg-gray-900/50 p-4 rounded border border-gray-700">
-        <h3 className="font-bold text-white mb-2">Character Ability</h3>
-        <p className="mb-4 text-blue-300 font-semibold">{selectedChar} selected.</p>
-        <ul className="list-disc pl-5 space-y-1">
-          <li>Arrow Keys / Touch D-Pad to move.</li>
-          <li>'A' Button to Jump.</li>
-          <li>'POW' Button to use Special Ability.</li>
+        <h3 className="font-bold text-white mb-2">Controls</h3>
+        <p className="mb-2 text-blue-300 font-semibold">{selectedChar} selected.</p>
+        <ul className="list-disc pl-5 space-y-1 mb-4">
+          <li><strong>Editor:</strong> Left-Click to Paint, Right-Click to Pan, Scroll to Zoom.</li>
+          <li><strong>Game:</strong> Arrow Keys to Move, 'A' to Jump, 'POW' for Ability.</li>
         </ul>
-        {selectedChar === CharacterType.Toad && (
-          <p className="text-blue-300 mt-2 italic">Tip: Use POW to grow vines and reach high places!</p>
-        )}
+        <p className="text-xs text-gray-500">
+          Tip: Use the palette above the editor to place blocks and enemies manually!
+        </p>
       </div>
 
     </div>
