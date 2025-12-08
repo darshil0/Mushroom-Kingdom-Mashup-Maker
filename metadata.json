@@ -1,0 +1,5 @@
+{
+  "name": "Mushroom Kingdom Mashup Maker",
+  "description": "Retro platformer engine with AI level generation, custom physics, and unique character abilities.",
+  "requestFramePermissions": []
+}
