@@ -101,8 +101,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
 
       // Update Player Size based on state
       const targetH = state.isBig ? TILE_SIZE * 1.5 : TILE_SIZE * 0.8;
-      if (p.h !== targetH) {
-        p.y -= (targetH - p.h);
+      // Smooth growth/shrink
+      if (Math.abs(p.h - targetH) > 1) {
+        p.y -= (targetH - p.h); // Keep bottom aligned roughly
         p.h = targetH;
       }
 
@@ -177,7 +178,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
             e.y = e.spawnStartY - TILE_SIZE;
             e.spawning = false;
             e.vy = 0;
-            e.vx = 2;
+            e.vx = 2; // Move right initially
           }
           return true;
         }
@@ -226,7 +227,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
       if (state.isBig) {
         state.isBig = false;
         state.invincibilityTimer = 120;
-        if (state.player) state.player.vy = -3;
+        if (state.player) {
+          state.player.vy = -3;
+          state.player.y += TILE_SIZE * 0.5; // Shift down slightly when shrinking
+        }
       } else {
         handleDeath();
       }
@@ -405,6 +409,14 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
         if (tile === TileType.Question) {
           ctx.fillStyle = "rgba(0,0,0,0.2)";
           ctx.fillRect(col * TILE_SIZE + 4, row * TILE_SIZE + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+          ctx.fillStyle = "white";
+          ctx.font = "bold 20px monospace";
+          ctx.fillText("?", col * TILE_SIZE + 8, row * TILE_SIZE + 24);
+        }
+        if (tile === TileType.Brick) {
+           ctx.fillStyle = "rgba(0,0,0,0.1)";
+           ctx.fillRect(col * TILE_SIZE + 2, row * TILE_SIZE + 2, TILE_SIZE - 4, 10);
+           ctx.fillRect(col * TILE_SIZE + 2, row * TILE_SIZE + 16, TILE_SIZE - 4, 10);
         }
       }
 
@@ -413,43 +425,123 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
         if (e.x + e.w < camX || e.x > camX + width) continue;
 
         ctx.fillStyle = ENTITY_COLORS[e.type] || '#fbbf24';
-        if (e.type === EntityType.Goomba) ctx.fillStyle = '#7f1d1d';
-        if (e.type === EntityType.Goal) ctx.fillStyle = '#fbbf24';
-        if (e.type === EntityType.Mushroom) {
+        if (e.type === EntityType.Goomba) {
+          ctx.fillStyle = '#7f1d1d';
+          // Draw angry eyes
+          ctx.fillRect(e.x, e.y, e.w, e.h);
+          ctx.fillStyle = "white";
+          ctx.fillRect(e.x + 4, e.y + 8, 8, 8);
+          ctx.fillRect(e.x + 20, e.y + 8, 8, 8);
+          ctx.fillStyle = "black";
+          ctx.fillRect(e.x + 6, e.y + 10, 4, 4);
+          ctx.fillRect(e.x + 22, e.y + 10, 4, 4);
+        } else if (e.type === EntityType.Goal) {
+           ctx.fillStyle = '#fbbf24';
+           ctx.fillRect(e.x, e.y, e.w, e.h);
+           ctx.fillStyle = "red";
+           ctx.beginPath();
+           ctx.arc(e.x + e.w/2, e.y + e.h/2, e.w/3, 0, Math.PI * 2);
+           ctx.fill();
+        } else if (e.type === EntityType.Mushroom) {
           ctx.fillStyle = '#ef4444';
-          ctx.fillRect(e.x + 4, e.y + 4, e.w - 8, e.h - 8);
+          ctx.beginPath();
+          ctx.arc(e.x + e.w/2, e.y + e.h/2, e.w/2 - 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "white";
+          ctx.beginPath();
+          ctx.arc(e.x + e.w/2, e.y + e.h/2 + 2, e.w/4, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillRect(e.x, e.y, e.w, e.h);
         }
-        ctx.fillRect(e.x, e.y, e.w, e.h);
       }
 
-      // Player Rendering
-      if (state.invincibilityTimer > 0 && Math.floor(Date.now() / 50) % 2 === 0) {
-        ctx.globalAlpha = 0.4;
-      }
-      const charColor = CHARACTERS[character]?.color || '#ef4444';
-      ctx.fillStyle = state.isClimbing ? '#fbbf24' : charColor;
-      
-      const drawPlayer = (x: number, y: number, w: number, h: number) => {
-        ctx.fillRect(x, y, w, h);
-        
-        // Draw Eyes to make direction/rotation visible
-        ctx.fillStyle = 'white';
-        const eyeSize = w * 0.15;
-        const lookDir = p.vx >= 0 ? 1 : -1;
-        
-        // Right/Front Eye
-        ctx.fillRect(x + w * 0.6 + (lookDir * w * 0.1), y + h * 0.2, eyeSize, eyeSize);
-        // Left/Back Eye
-        if (Math.abs(p.vx) < 0.1) {
-             ctx.fillRect(x + w * 0.2, y + h * 0.2, eyeSize, eyeSize);
+      // --- PROCEDURAL PLAYER RENDERING ---
+      const drawCharacter = (x: number, y: number, w: number, h: number) => {
+        // Invincibility Flash
+        if (state.invincibilityTimer > 0) {
+           if (Math.floor(Date.now() / 50) % 2 === 0) {
+             ctx.globalAlpha = 0.5;
+           } else {
+             ctx.globalAlpha = 0.8;
+           }
         }
+
+        const facingRight = (p.vx || 0) >= 0;
+        const mainColor = CHARACTERS[character]?.color || '#ef4444';
+        const skinColor = '#ffdbac';
+        const blue = '#2563eb';
+        
+        // Bobbing animation for walking
+        let bobY = 0;
+        if (Math.abs(p.vx || 0) > 0.1 && !state.canJump === false) {
+           bobY = Math.sin(Date.now() / 50) * 2;
+        }
+
+        const drawRect = (rx: number, ry: number, rw: number, rh: number, color: string) => {
+          ctx.fillStyle = color;
+          ctx.fillRect(x + w * rx, y + h * ry + bobY, w * rw, h * rh);
+        };
+
+        if (character === CharacterType.Toad) {
+           // Cap
+           drawRect(0, 0, 1, 0.45, 'white');
+           drawRect(0.2, 0.1, 0.6, 0.2, mainColor); // Spots
+           // Face
+           drawRect(0.15, 0.45, 0.7, 0.25, skinColor);
+           // Vest
+           drawRect(0.2, 0.7, 0.6, 0.3, blue);
+        } else if (character === CharacterType.Peach) {
+           // Crown
+           drawRect(0.35, -0.1, 0.3, 0.2, 'gold');
+           // Hair
+           drawRect(0.1, 0.1, 0.8, 0.3, '#fde047');
+           // Face
+           drawRect(0.25, 0.25, 0.5, 0.2, skinColor);
+           // Dress
+           drawRect(0.1, 0.45, 0.8, 0.55, mainColor);
+           drawRect(0.3, 0.45, 0.4, 0.55, '#fbcfe8'); // Inner Dress
+        } else {
+           // Mario & Luigi
+           // Hat
+           drawRect(0, 0, 1, 0.2, mainColor);
+           drawRect(facingRight ? 0.2 : 0, 0.2, 0.8, 0.1, mainColor); // Brim
+           
+           // Face & Ears
+           drawRect(0.1, 0.2, 0.8, 0.3, skinColor);
+           
+           // Mustache
+           ctx.fillStyle = 'black';
+           const mX = facingRight ? x + w * 0.5 : x + w * 0.2;
+           ctx.fillRect(mX, y + h * 0.35 + bobY, w * 0.3, h * 0.08);
+
+           // Overalls
+           drawRect(0.15, 0.5, 0.7, 0.5, blue);
+           // Shirt/Arms
+           drawRect(facingRight ? 0.4 : 0.1, 0.5, 0.3, 0.25, mainColor);
+           
+           // Buttons
+           ctx.fillStyle = 'gold';
+           if (facingRight) {
+             ctx.fillRect(x + w * 0.6, y + h * 0.6 + bobY, w*0.1, w*0.1);
+           } else {
+             ctx.fillRect(x + w * 0.3, y + h * 0.6 + bobY, w*0.1, w*0.1);
+           }
+        }
+
+        // Eyes (Common)
+        ctx.fillStyle = 'black';
+        const eyeX = facingRight ? x + w * 0.7 : x + w * 0.2;
+        ctx.fillRect(eyeX, y + h * 0.25 + bobY, w * 0.1, w * 0.15);
+
+        // Restore Alpha
+        ctx.globalAlpha = 1.0;
       };
 
+      // Apply Transformations (Spin Jump)
       if (!state.canJump && !state.isClimbing) {
-        // Spin Jump Animation
-        const spinSpeed = 0.4; // Radians per frame approx
+        const spinSpeed = 0.4;
         const angle = (Date.now() / 100) % (Math.PI * 2);
-        
         const cx = p.x + p.w / 2;
         const cy = p.y + p.h / 2;
 
@@ -457,15 +549,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
         ctx.translate(cx, cy);
         ctx.rotate(angle);
         ctx.translate(-cx, -cy);
-        
-        drawPlayer(p.x, p.y, p.w, p.h);
-        
+        drawCharacter(p.x, p.y, p.w, p.h);
         ctx.restore();
       } else {
-        drawPlayer(p.x, p.y, p.w, p.h);
+        drawCharacter(p.x, p.y, p.w, p.h);
       }
-
-      ctx.globalAlpha = 1.0;
 
       ctx.restore();
 
@@ -482,6 +570,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
       const stateText = `STATE: ${state.isBig ? 'SUPER' : 'SMALL'}`;
       ctx.strokeText(stateText, 20, 70);
       ctx.fillText(stateText, 20, 70);
+      
+      if (state.invincibilityTimer > 0) {
+         ctx.fillStyle = "#facc15"; // Yellow warning
+         ctx.fillText("INVINCIBLE", 20, 100);
+      }
     };
 
     update();
