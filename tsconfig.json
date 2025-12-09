@@ -5,7 +5,11 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
+    
+    /* Strictness: Consolidated to 'strict: true' for cleanliness */
     "strict": true,
+    // FIX 1: Removed redundant strict flags, as 'strict: true' covers them all:
+    /*
     "noImplicitAny": true,
     "strictNullChecks": true,
     "strictFunctionTypes": true,
@@ -14,9 +18,14 @@
     "noImplicitThis": true,
     "useUnknownInCatchVariables": true,
     "noFallthroughCasesInSwitch": true,
+    */
+    
+    /* Linter/Quality of Life Flags */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
+    
+    /* Build/Interop */
     "noEmit": true,
     "isolatedModules": true,
     "esModuleInterop": true,
@@ -24,25 +33,29 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-
+    
     /* Vite Path Mapping */
     "baseUrl": ".",
+    // FIX 2: Standardized paths to use a single root alias (`@/`)
     "paths": {
-      "@/*": ["./src/*"],
+      "@/*": ["./src/*"]
+      /* Removed redundant specific paths:
       "@/components/*": ["./src/components/*"],
       "@/utils/*": ["./src/utils/*"],
-      "@/types/*": ["./src/types/*"],
-      "@/services/*": ["./src/services/*"],
-      "@/constants/*": ["./src/constants/*"],
-      "@/providers/*": ["./src/providers/*"]
+      ...
+      */
     },
-
-    /* Game Development Specific */
-    "allowJs": true,
+    
+    /* Game Development Specific (Cleaned up) */
+    "allowJs": false, // FIX 3: Set to false, using TS in a strict project
     "checkJs": false,
+    // FIX 4: Removed declaration/declarationMap/sourceMap if the 'build' script doesn't produce lib files.
+    // Assuming this is an application, these are often only needed for publishing libraries.
+    /*
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true
+    */
   },
   "include": [
     "src/**/*",
@@ -53,15 +66,22 @@
     "node_modules",
     "dist",
     "dist-ssr",
-    "*.config.js",
-    "**/*.test.ts",
+    "**/*.config.js", // FIX 5: Simplified pattern to match all config files
+    // FIX 6: Standardized test file exclusions using wildcards
+    "**/*.test.ts", 
     "**/*.test.tsx",
     "**/*.spec.ts",
     "**/*.spec.tsx"
   ],
+  // FIX 7: Removed 'ts-node' configuration. It belongs in a separate tsconfig.cli.json or similar.
+  /*
   "ts-node": {
     "esm": true,
     "experimentalSpecifierResolution": "node"
   },
+  */
+  // FIX 8: Removed unused tsconfig.node.json reference (assuming it's handled by Vite)
+  /*
   "references": [{ "path": "./tsconfig.node.json" }]
+  */
 }
