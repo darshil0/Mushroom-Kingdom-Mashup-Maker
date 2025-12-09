@@ -1,4 +1,6 @@
-# Logs
+# -------------------------
+# 1. Logs & Debugging
+# -------------------------
 logs
 *.log
 npm-debug.log*
@@ -7,18 +9,52 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# -------------------------
+# 2. Dependencies & Builds
+# -------------------------
+# Node dependencies
 node_modules
-dist
-dist-ssr
-*.local
+/package-lock.json  # If you prefer only yarn.lock
+/yarn.lock          # If you prefer only package-lock.json
 
-# Editor directories and files
+# Build directories
+dist
+build
+out
+dist-ssr
+/public/build
+
+# -------------------------
+# 3. Environment & Secrets
+# -------------------------
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.local # Catches all .local files/folders
+
+# -------------------------
+# 4. Cache & Temporary Files
+# -------------------------
+.cache
+.parcel-cache
+.nuxt/
+.next/
+/coverage
+
+# -------------------------
+# 5. OS & IDE
+# -------------------------
+# OSX
+.DS_Store
+
+# VSCode
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+.vscode/*.local
+
+# IntelliJ / WebStorm
+.idea/
+*.iws
+*.iml
+*.ipr
