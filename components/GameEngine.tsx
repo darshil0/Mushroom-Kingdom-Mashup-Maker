@@ -540,7 +540,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
 
       // Apply Transformations (Spin Jump)
       if (!state.canJump && !state.isClimbing) {
-        const spinSpeed = 0.4;
+        /*const spinSpeed = 0.4;*/
         const angle = (Date.now() / 100) % (Math.PI * 2);
         const cx = p.x + p.w / 2;
         const cy = p.y + p.h / 2;
