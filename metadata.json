@@ -2,108 +2,22 @@
   "name": "Mushroom Kingdom Mashup Maker",
   "short_name": "Mushroom Maker",
   "description": "AI-powered retro platformer with Mario, Luigi, Toad & Peach. Generate infinite levels with Gemini 2.5 Flash!",
-  "icons": [
-    {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><text y='.85em' font-size='170' text-anchor='middle'>🍄</text></svg>",
-      "sizes": "192x192",
-      "type": "image/svg+xml"
-    },
-    {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><text y='.85em' font-size='450' text-anchor='middle'>🍄</text></svg>",
-      "sizes": "512x512",
-      "type": "image/svg+xml"
-    }
-  ],
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#1e1b4b",
+  
+  /* Retained basic identification and versioning */
+  "version": "1.0.4",
+  "build_date": "2025-12-08",
+  "language": "en-US",
+  "categories": ["game", "entertainment", "editor"],
+  
+  /* App Configuration - consistent with constants.ts and index.html */
   "theme_color": "#ef4444",
-  "theme_color_data": "#ef4444",
-  "orientation": "landscape",
-  "categories": ["game", "entertainment"],
-  "lang": "en-US",
-  "dir": "ltr",
-
-  "scope": "/",
-  "prefer_related_applications": false,
-
-  /* PWA Permissions (Runtime Requested) */
-  "permissions": [
-    "fullscreen",
-    "gamepad",
-    "vibrate"
-  ],
-
-  /* Feature Policy (Optional) */
-  "permissions_policy": {
-    "fullscreen": ["self"],
-    "gamepad": ["self"],
-    "vibrate": ["self"],
-    "autoplay": ["self"]
+  "background_color": "#1e1b4b",
+  "default_orientation": "landscape",
+  
+  /* Asset references for preloading or CDN */
+  "icon_assets": {
+    "192x192": "data:image/svg+xml,...",
+    "512x512": "data:image/svg+xml,..."
   },
-
-  /* Screenshot & Preview */
-  "screenshots": [
-    {
-      "src": "https://via.placeholder.com/1280x720/1e1b4b/ffffff?text=Mushroom+Kingdom+Mashup+Maker",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide"
-    }
-  ],
-
-  /* Advanced PWA Features */
-  "shortcuts": [
-    {
-      "name": "New Level",
-      "short_name": "New Level",
-      "description": "Generate a new AI level",
-      "url": "/?new-level",
-      "icons": [{
-        "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='.9em' font-size='80'>🎲</text></svg>",
-        "sizes": "96x96"
-      }]
-    },
-    {
-      "name": "Mario Mode",
-      "short_name": "Mario",
-      "description": "Play as Mario",
-      "url": "/?character=Mario",
-      "icons": [{"src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><circle cx='48' cy='48' r='40' fill='%23e3342f'/><text y='.9em' font-size='60' fill='white' text-anchor='middle'>M</text></svg>", "sizes": "96x96"}]
-    }
-  ],
-
-  /* Offline Support */
-  "offline_enabled": true,
-
-  /* Share Target (Web Share API) */
-  "share_target": {
-    "action": "/pwa-share.html",
-    "method": "POST",
-    "enctype": "multipart/form-data",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url",
-      "files": [
-        {
-          "name": "level_file",
-          "accept": [".txt", ".json"]
-        }
-      ]
-    }
-  },
-
-  /* Protocol Handlers (Custom URL Schemes) */
-  "protocol_handlers": [
-    {
-      "protocol": "mushroommaker",
-      "title": "Mushroom Kingdom Maker",
-      "url": "/import?url=%s"
-    }
-  ],
-
-  /* Version & Build Info */
-  "version": "1.0.3",
-  "build": "2025-12-08"
+  "screenshot_url": "https://via.placeholder.com/1280x720/1e1b4b/ffffff?text=Mushroom+Kingdom+Mashup+Maker+Screenshot"
 }
