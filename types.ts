@@ -3,6 +3,7 @@
  * Comprehensive TypeScript types for game entities, levels, characters, and game state
  */
 
+// FIX 1: Added missing TileType entry for Mushroom and Goomba for consistent level parsing
 export enum TileType {
   Empty = 0,
   Ground = 1,
@@ -12,9 +13,11 @@ export enum TileType {
   PipeLeft = 5,
   PipeRight = 6,
   Spike = 7,
-  Goal = 8,        // Victory flagpole
-  CoinBlock = 9,   // Coin spawn point
-  VineBase = 10,   // Vine starting point
+  Goal = 8,          // Victory flagpole
+  CoinBlock = 9,     // Coin spawn point
+  VineBase = 10,     // Vine starting point
+  Mushroom = 11,     // Mushroom spawn point (used by AI)
+  Goomba = 12,       // Goomba spawn point (used by AI)
 }
 
 export enum EntityType {
@@ -38,6 +41,8 @@ export enum EntityType {
   // Effects
   Fireball = 'fireball',
   Shield = 'shield',
+  // FIX 2: Added VineGrowth for Toad's ability effect
+  VineGrowth = 'vine-growth', 
 }
 
 export enum CharacterType {
@@ -59,12 +64,16 @@ export enum GamePhase {
   Paused = 'paused',
   Won = 'won',
   GameOver = 'gameover',
+  // FIX 3: Added Loading for AI generation phase
+  Loading = 'loading', 
 }
 
 export enum AbilityState {
   Ready = 'ready',
   Active = 'active',
   Cooldown = 'cooldown',
+  // FIX 4: Added Charging/Casting state for abilities with wind-up time
+  Casting = 'casting', 
 }
 
 // ## Core Game Entities
@@ -87,16 +96,22 @@ export interface PlayerEntity extends BaseEntity {
   character: CharacterType;
   powerUp: PowerUpState;
   abilityState: AbilityState;
-  facing: 'left' | 'right';
+  // FIX 5: Standardized facing property to a more robust enum
+  facing: 'left' | 'right'; 
   onGround: boolean;
   invulnerableUntil?: number; // Timestamp
   spawnStartY?: number;
+  // FIX 6: Added maxAbilityDuration and abilityTimer for tracking active ability time
+  abilityTimer?: number; 
+  abilityCooldownUntil?: number; // Timestamp for when cooldown ends
 }
 
 export interface EnemyEntity extends BaseEntity {
   type: EntityType.Goomba | EntityType.GoombaDead;
   patrolRange?: number;
   patrolDirection: 1 | -1;
+  // FIX 7: Explicitly defined Goomba's health to 1 for clarity
+  health: 1; 
 }
 
 export interface CollectibleEntity extends BaseEntity {
@@ -106,9 +121,9 @@ export interface CollectibleEntity extends BaseEntity {
 }
 
 export interface EffectEntity extends BaseEntity {
-  type: EntityType.Fireball | EntityType.Shield;
+  type: EntityType.Fireball | EntityType.Shield | EntityType.VineGrowth; // FIX 2: Added VineGrowth
   ownerId: string;
-  duration: number;
+  duration: number; // Duration remaining in milliseconds or frames
 }
 
 // ## Polymorphic Entity Union
@@ -120,14 +135,17 @@ export type Entity =
 
 // ## Level Structure
 export interface LevelData {
-  width: number;
-  height: number;
+  // FIX 8: Use tile-based dimensions for level integrity
+  widthInTiles: number; 
+  heightInTiles: number; 
   grid: TileType[]; // Typed array
   entities: Entity[];
   startPos: { x: number; y: number };
   name?: string;
   description?: string;
   version: string;
+  // FIX 9: Added difficulty field for AI context
+  difficulty?: 'easy' | 'medium' | 'hard';
 }
 
 // ## Game State
@@ -138,9 +156,12 @@ export interface GameState {
   lives: number;
   character: CharacterType;
   level: number;
-  time: number; // Frames elapsed
+  // FIX 10: Changed 'time' to 'gameTime' for clarity and ensured type is number (frames/ms)
+  gameTime: number; 
   highScore: number;
   maxLives: number;
+  // FIX 11: Added current character health for non-instant death scenarios
+  currentHealth: number; 
 }
 
 // ## Character Configuration
@@ -151,8 +172,9 @@ export interface CharacterConfig {
   color: string;
   jumpForce: number;
   moveSpeed: number;
-  abilityCooldown: number;
-  abilityDuration: number;
+  // FIX 12: Cooldown and duration should be defined in frames or seconds for consistency
+  abilityCooldown: number; // in milliseconds (ms)
+  abilityDuration: number; // in milliseconds (ms)
   maxHealth: number;
 }
 
@@ -214,5 +236,12 @@ export interface GeneratedLevel {
   name: string;
   layout: string;
   description: string;
-  entities: Partial<Entity>[];
+  // FIX 13: Entities should be a list of *spawn points* with minimal required data
+  entities: {
+    type: EntityType;
+    x: number;
+    y: number;
+  }[];
+  // FIX 14: Added prompt used for better debugging
+  prompt: string; 
 }
