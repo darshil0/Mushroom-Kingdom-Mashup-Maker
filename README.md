@@ -52,6 +52,7 @@ Key test files:
 - `App.test.tsx`: Validates main application flow and UI interactions.
 
 ### Version History
+- **v1.0.4**: Fix: Corrected an array padding issue in `App.tsx` that occurred during AI level generation, ensuring level data integrity.
 - **v1.0.3**: Fix: Isolated game state to prevent destructible blocks (bricks, question blocks) from persisting in Editor mode. Fixed magic numbers in UI code.
 - **v1.0.2**: Optimization of GameEngine loop, added comprehensive integration tests for AI flow, and finalized documentation.
 - **v1.0.1**: Added robust level parsing, fixed collision bugs with pipes, added unit tests, and improved code formatting.
