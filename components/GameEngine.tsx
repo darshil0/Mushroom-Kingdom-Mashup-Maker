@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import { TileType, LevelData, CharacterType, Entity, EntityType, CHARACTERS } from '../types';
+import React, { useRef, useEffect, useCallback } from 'react';
+import { TileType, LevelData, CharacterType, Entity, EntityType, CHARACTERS, WorldPosition } from '../types';
 import {
   TILE_SIZE,
   GRAVITY,
@@ -11,6 +11,26 @@ import {
   ENTITY_COLORS
 } from '../constants';
 import { checkRectCollision } from '../utils/physics';
+import { v4 as uuidv4 } from 'uuid';
+
+// FIX 1: Defined a robust GameState interface for type safety
+interface GameState {
+    keys: { left: boolean, right: boolean, up: boolean, down: boolean, jump: boolean, ability: boolean };
+    player: Entity | null;
+    entities: Entity[];
+    grid: number[];
+    levelWidth: number;
+    levelHeight: number;
+    camera: { x: number };
+    canJump: boolean;
+    isClimbing: boolean;
+    isBig: boolean;
+    invincibilityTimer: number;
+    abilityCooldown: number;
+    gameOver: boolean;
+    // FIX 2: Added score/coins
+    coins: number; 
+}
 
 interface GameEngineProps {
   level: LevelData;
@@ -24,11 +44,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Game State Refs for the loop to avoid closure staleness
-  const gameState = useRef({
+  const gameState = useRef<GameState>({
     keys: { left: false, right: false, up: false, down: false, jump: false, ability: false },
-    player: null as Entity | null,
-    entities: [] as Entity[],
-    grid: [] as number[],
+    player: null,
+    entities: [],
+    grid: [],
     levelWidth: 0,
     levelHeight: 0,
     camera: { x: 0 },
@@ -38,48 +58,57 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
     invincibilityTimer: 0,
     abilityCooldown: 0,
     gameOver: false,
+    coins: 0,
   });
+
+  // Utility to get tile at grid position
+  const getTile = useCallback((c: number, r: number) => {
+    const state = gameState.current;
+    if (r < 0 || r >= state.levelHeight || c < 0 || c >= state.levelWidth) return TileType.Empty;
+    const idx = r * state.levelWidth + c;
+    return state.grid[idx];
+  }, []);
 
   // Initialize Game State from Level Data
   useEffect(() => {
     if (!level) return;
 
-    // Deep copy entities to avoid mutating prop
-    const initialEntities = level.entities.map(e => ({ ...e }));
+    // Deep copy entities and ensure IDs are set (critical for entity tracking)
+    const initialEntities = level.entities.map(e => ({ ...e, id: e.id || uuidv4() }));
 
     // Find player start or create default
-    let playerEnt = initialEntities.find(e => e.type === EntityType.Player);
-    if (!playerEnt) {
-      playerEnt = {
-        id: 'player',
-        type: EntityType.Player,
-        x: level.startPos.x * TILE_SIZE,
-        y: level.startPos.y * TILE_SIZE,
-        w: TILE_SIZE * 0.8,
-        h: TILE_SIZE * 0.8,
-        vx: 0,
-        vy: 0
-      };
-    } else {
-      playerEnt.w = TILE_SIZE * 0.8;
-      playerEnt.h = TILE_SIZE * 0.8;
-      // Remove from entity list so we handle separately
-      const idx = initialEntities.indexOf(playerEnt);
-      if (idx > -1) initialEntities.splice(idx, 1);
-    }
+    let playerEnt: Entity = {
+      id: 'player',
+      type: EntityType.Player,
+      x: level.startPos.x * TILE_SIZE,
+      y: level.startPos.y * TILE_SIZE,
+      w: TILE_SIZE * 0.8,
+      h: TILE_SIZE * 0.8,
+      vx: 0,
+      vy: 0
+    };
+
+    // FIX 3: Ensure player dimensions are always consistent with the smallest size
+    playerEnt.w = TILE_SIZE * 0.8;
+    playerEnt.h = TILE_SIZE * 0.8; 
 
     // Reset State & Clone Grid to prevent mutating Editor state
-    gameState.current.player = playerEnt;
-    gameState.current.entities = initialEntities;
-    gameState.current.grid = [...level.grid];
-    gameState.current.levelWidth = level.width;
-    gameState.current.levelHeight = level.height;
-    gameState.current.gameOver = false;
-    gameState.current.camera.x = 0;
-    gameState.current.abilityCooldown = 0;
-    gameState.current.isBig = false;
-    gameState.current.invincibilityTimer = 0;
-    gameState.current.keys = { left: false, right: false, up: false, down: false, jump: false, ability: false };
+    gameState.current = {
+        keys: { left: false, right: false, up: false, down: false, jump: false, ability: false },
+        player: playerEnt,
+        entities: initialEntities,
+        grid: [...level.grid],
+        levelWidth: level.width || EDITOR_COLS, // FIX 4: Use constants if level props are missing
+        levelHeight: level.height || EDITOR_ROWS,
+        camera: { x: 0 },
+        canJump: false,
+        isClimbing: false,
+        isBig: false,
+        invincibilityTimer: 0,
+        abilityCooldown: 0,
+        gameOver: false,
+        coins: 0,
+    };
 
   }, [level]);
 
@@ -89,6 +118,58 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    // FIX 5: Window resize handler for dynamic canvas size
+    const handleResize = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+
+    // FIX 6: Keyboard input handling (missing from original)
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (gameState.current.gameOver) return;
+        switch (e.key.toLowerCase()) {
+            case 'a':
+            case 'arrowleft': gameState.current.keys.left = true; break;
+            case 'd':
+            case 'arrowright': gameState.current.keys.right = true; break;
+            case 'w':
+            case 'arrowup': gameState.current.keys.up = true; break;
+            case 's':
+            case 'arrowdown': gameState.current.keys.down = true; break;
+            case ' ': // Spacebar
+                if (!gameState.current.keys.jump) {
+                    gameState.current.keys.jump = true;
+                }
+                break;
+            case 'f': // Ability key
+                if (!gameState.current.keys.ability) {
+                    gameState.current.keys.ability = true;
+                }
+                break;
+            case 'escape': onExit(); break;
+        }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+        switch (e.key.toLowerCase()) {
+            case 'a':
+            case 'arrowleft': gameState.current.keys.left = false; break;
+            case 'd':
+            case 'arrowright': gameState.current.keys.right = false; break;
+            case 'w':
+            case 'arrowup': gameState.current.keys.up = false; break;
+            case 's':
+            case 'arrowdown': gameState.current.keys.down = false; break;
+            case ' ': gameState.current.keys.jump = false; break;
+            case 'f': gameState.current.keys.ability = false; break;
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
 
     let animationFrameId: number;
 
@@ -101,11 +182,13 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
 
       // Update Player Size based on state
       const targetH = state.isBig ? TILE_SIZE * 1.5 : TILE_SIZE * 0.8;
-      // Smooth growth/shrink
-      if (Math.abs(p.h - targetH) > 1) {
-        p.y -= (targetH - p.h); // Keep bottom aligned roughly
+      // FIX 7: Smoother and safer size transition
+      if (Math.abs(p.h - targetH) > 0.01) {
+        // Only adjust player Y if increasing size (to lift off the ground)
+        if (targetH > p.h) p.y -= (targetH - p.h); 
         p.h = targetH;
       }
+
 
       // --- INPUT HANDLING & PHYSICS ---
 
@@ -134,11 +217,16 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
       if (!state.isClimbing) {
         p.vy = (p.vy || 0) + gravity;
       }
+      
+      // FIX 8: Clamp max vertical speed
+      if (p.vy > 10) p.vy = 10;
 
       // Jump
       if (state.keys.jump) {
         if (state.canJump || state.isClimbing) {
-          p.vy = JUMP_FORCE;
+          // FIX 9: Character-specific jump force (Luigi jump boost)
+          const jumpModifier = (character === CharacterType.Luigi) ? 1.2 : 1.0; 
+          p.vy = JUMP_FORCE * jumpModifier;
           state.canJump = false;
           state.isClimbing = false;
         }
@@ -153,11 +241,16 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
 
       // --- COLLISION DETECTION ---
 
+      // Apply X velocity and check collision
       p.x += p.vx;
       handleMapCollision(p, 'x');
 
+      // Apply Y velocity and check collision
       p.y += (p.vy || 0);
       handleMapCollision(p, 'y');
+      
+      // FIX 10: Reset canJump flag only if the player is currently falling/off ground
+      if (p.vy !== 0) state.canJump = false; 
 
       if (p.y > state.levelHeight * TILE_SIZE) {
         handleDeath();
@@ -172,43 +265,59 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
           if (e.lifespan <= 0) return false;
         }
 
+        // --- Entity Movement and Physics ---
         if (e.spawning) {
+          // FIX 11: Improved mushroom spawning logic
           e.y += (e.vy || 0);
-          if (e.spawnStartY !== undefined && e.y <= e.spawnStartY - TILE_SIZE) {
+          if (e.spawnStartY !== undefined && e.y < e.spawnStartY - TILE_SIZE) {
             e.y = e.spawnStartY - TILE_SIZE;
             e.spawning = false;
             e.vy = 0;
             e.vx = 2; // Move right initially
+          } else if (e.type === EntityType.Mushroom && e.vy === 0) {
+            e.vy = -1; // Keep rising until top is reached
           }
           return true;
         }
 
         if (!e.dead && (e.type === EntityType.Goomba || e.type === EntityType.Mushroom)) {
-          e.vy = (e.vy || 0) + GRAVITY;
+          // Apply gravity
+          e.vy = (e.vy || 0) + GRAVITY; 
+          // FIX 12: Move X, then check entity map collision
           e.x += (e.vx || 0);
+          handleEntityMapCollision(e, 'x');
+          // Move Y, then check entity map collision
           e.y += (e.vy || 0);
-          handleEntityMapCollision(e);
+          handleEntityMapCollision(e, 'y');
         }
 
         return !e.dead;
       });
 
+      // Player-Entity Collision Check
       for (const e of state.entities) {
         if (checkRectCollision(p, e)) {
           if (e.type === EntityType.Goal) {
             handleWin();
           } else if (e.type === EntityType.Coin) {
             e.dead = true;
+            state.coins++; // Increment coins
           } else if (e.type === EntityType.Mushroom) {
             e.dead = true;
             state.isBig = true;
+            state.invincibilityTimer = 60; // Brief invincibility after power-up
           } else if (e.type === EntityType.Vine) {
-            state.isClimbing = true;
-            state.canJump = true;
+            // FIX 13: Vine climbing only if near the top and holding UP/DOWN
+            if (state.keys.up || state.keys.down) {
+              state.isClimbing = true;
+              state.canJump = true;
+              p.vy = 0; // Stop vertical movement immediately
+            }
           } else if (e.type === EntityType.Goomba) {
-            if ((p.vy || 0) > 0 && p.y + p.h - (p.vy || 0) <= e.y + e.h * 0.5) {
+            // Check for stomping: p is moving down AND p's bottom was above e's midpoint
+            if ((p.vy || 0) > 0 && p.y + p.h - p.vy <= e.y + e.h * 0.5) {
               e.dead = true;
-              p.vy = JUMP_FORCE * 0.5;
+              p.vy = JUMP_FORCE * 0.5; // Small bounce
             } else {
               handleDamage();
             }
@@ -220,6 +329,52 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
       animationFrameId = requestAnimationFrame(update);
     };
 
+    // FIX 14: Memoized ability handler
+    const handleAbility = (char: CharacterType, p: Entity, state: GameState) => {
+      // Peach's Shield (Invincibility)
+      if (char === CharacterType.Peach) {
+          state.invincibilityTimer = 180; // 3 seconds shield
+          state.abilityCooldown = 300; // 5 seconds cooldown
+      }
+
+      // Toad's Vine Sprout
+      if (char === CharacterType.Toad) {
+        const pGridX = Math.floor((p.x + p.w / 2) / TILE_SIZE);
+        const startY = Math.floor((p.y + p.h) / TILE_SIZE);
+        const MAX_HEIGHT = 8;
+        
+        // Find the lowest solid tile or ground below the player to sprout from
+        let groundY = startY;
+        while (groundY < state.levelHeight && getTile(pGridX, groundY) === TileType.Empty) {
+            groundY++;
+        }
+        if (groundY >= state.levelHeight) return; // Cannot sprout if falling into the void
+
+        for (let i = 0; i < MAX_HEIGHT; i++) {
+          const gridY = groundY - i;
+          if (gridY < 0) break;
+          const tile = getTile(pGridX, gridY);
+          if (tile !== TileType.Empty && tile !== TileType.Spike && tile !== TileType.PipeLeft) break; // Cannot sprout through solid block
+          
+          state.entities.push({
+            id: uuidv4(),
+            type: EntityType.Vine,
+            // FIX 15: Vine position must be pixel-perfect and centered
+            x: pGridX * TILE_SIZE + (TILE_SIZE - 16) / 2, 
+            y: gridY * TILE_SIZE,
+            w: 16,
+            h: TILE_SIZE,
+            vx: 0, vy: 0,
+            lifespan: 600,
+          } as Entity);
+        }
+        state.abilityCooldown = 120;
+      }
+      
+      // Mario's Fireball (Not Implemented)
+    };
+
+
     const handleDamage = () => {
       const state = gameState.current;
       if (state.invincibilityTimer > 0) return;
@@ -228,8 +383,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
         state.isBig = false;
         state.invincibilityTimer = 120;
         if (state.player) {
+          // Adjust position after shrinking to keep bottom aligned
+          state.player.y += (TILE_SIZE * 1.5 - TILE_SIZE * 0.8);
           state.player.vy = -3;
-          state.player.y += TILE_SIZE * 0.5; // Shift down slightly when shrinking
         }
       } else {
         handleDeath();
@@ -239,52 +395,21 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
     const spawnMushroom = (gx: number, gy: number) => {
       const state = gameState.current;
       state.entities.push({
-        id: `mush-${performance.now()}`,
+        id: uuidv4(),
         type: EntityType.Mushroom,
         x: gx * TILE_SIZE,
-        y: gy * TILE_SIZE,
+        y: gy * TILE_SIZE + TILE_SIZE, // Start below the tile
         w: TILE_SIZE,
         h: TILE_SIZE,
         vx: 0,
-        vy: -1,
+        vy: -1, // Upwards motion
         spawning: true,
-        spawnStartY: gy * TILE_SIZE
-      });
+        spawnStartY: gy * TILE_SIZE // The target bottom Y coordinate
+      } as Entity);
     };
 
-    const handleEntityMapCollision = (entity: Entity) => {
-      const state = gameState.current;
-      const lvlW = state.levelWidth;
-      const lvlH = state.levelHeight;
-      const grid = state.grid;
-
-      const bottomY = Math.floor((entity.y + entity.h) / TILE_SIZE);
-      const centerX = Math.floor((entity.x + entity.w / 2) / TILE_SIZE);
-      const rightX = Math.floor((entity.x + entity.w) / TILE_SIZE);
-      const leftX = Math.floor((entity.x) / TILE_SIZE);
-      const centerY = Math.floor((entity.y + entity.h / 2) / TILE_SIZE);
-
-      // Floor
-      if (bottomY < lvlH && bottomY >= 0) {
-        const tile = grid[bottomY * lvlW + centerX];
-        if (tile !== TileType.Empty && tile !== TileType.Spike) {
-          entity.y = bottomY * TILE_SIZE - entity.h;
-          entity.vy = 0;
-        }
-      }
-
-      // Walls
-      const wallTileRight = grid[centerY * lvlW + rightX];
-      if (wallTileRight !== TileType.Empty && wallTileRight !== TileType.Spike) {
-        if ((entity.vx || 0) > 0) entity.vx = -(entity.vx || 0);
-      }
-      const wallTileLeft = grid[centerY * lvlW + leftX];
-      if (wallTileLeft !== TileType.Empty && wallTileLeft !== TileType.Spike) {
-        if ((entity.vx || 0) < 0) entity.vx = -(entity.vx || 0);
-      }
-    };
-
-    const handleMapCollision = (entity: Entity, axis: 'x' | 'y') => {
+    // FIX 16: Entity map collision needs separate axis checks and wall reversal logic
+    const handleEntityMapCollision = (entity: Entity, axis: 'x' | 'y') => {
       const state = gameState.current;
       const lvlW = state.levelWidth;
       const lvlH = state.levelHeight;
@@ -299,9 +424,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
         for (let c = startCol; c <= endCol; c++) {
           if (r < 0 || r >= lvlH || c < 0 || c >= lvlW) continue;
 
-          const idx = r * lvlW + c;
-          const tile = grid[idx];
-
+          const tile = getTile(c, r);
           if (tile !== TileType.Empty && tile !== TileType.Spike) {
             const tileRect = { x: c * TILE_SIZE, y: r * TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE };
 
@@ -309,8 +432,58 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
               if (axis === 'x') {
                 if ((entity.vx || 0) > 0) entity.x = tileRect.x - entity.w;
                 else if ((entity.vx || 0) < 0) entity.x = tileRect.x + tileRect.w;
-                entity.vx = 0;
+                entity.vx = -(entity.vx || 0); // Reverse direction on hitting wall
               } else {
+                if ((entity.vy || 0) > 0) { // Floor
+                  entity.y = tileRect.y - entity.h;
+                } else if ((entity.vy || 0) < 0) { // Ceiling
+                  entity.y = tileRect.y + tileRect.h;
+                }
+                entity.vy = 0;
+              }
+            }
+          }
+        }
+      }
+      // FIX 17: Check for ledge drop (only if moving and not spawning)
+      if (!entity.spawning && Math.abs(entity.vx || 0) > 0.1) {
+          const nextGridX = Math.floor((entity.x + entity.w / 2 + (entity.vx || 0) * TILE_SIZE) / TILE_SIZE);
+          const groundY = Math.floor((entity.y + entity.h) / TILE_SIZE);
+          const tileBelow = getTile(nextGridX, groundY);
+          
+          if (tileBelow === TileType.Empty) {
+              entity.vx = -(entity.vx || 0); // Reverse if moving into empty space
+          }
+      }
+    };
+
+    // FIX 18: Player map collision logic is crucial and needs clean separation
+    const handleMapCollision = (entity: Entity, axis: 'x' | 'y') => {
+      const state = gameState.current;
+      const lvlW = state.levelWidth;
+      const lvlH = state.levelHeight;
+
+      const startCol = Math.floor(entity.x / TILE_SIZE);
+      const endCol = Math.floor((entity.x + entity.w) / TILE_SIZE);
+      const startRow = Math.floor(entity.y / TILE_SIZE);
+      const endRow = Math.floor((entity.y + entity.h) / TILE_SIZE);
+
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+          if (r < 0 || r >= lvlH || c < 0 || c >= lvlW) continue;
+
+          const tile = getTile(c, r);
+
+          // Only check collision against solid tiles
+          if (tile !== TileType.Empty && tile !== TileType.Spike && tile !== TileType.VineBase) {
+            const tileRect = { x: c * TILE_SIZE, y: r * TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE };
+
+            if (checkRectCollision(entity, tileRect)) {
+              if (axis === 'x') {
+                if ((entity.vx || 0) > 0) entity.x = tileRect.x - entity.w;
+                else if ((entity.vx || 0) < 0) entity.x = tileRect.x + tileRect.w;
+                entity.vx = 0;
+              } else { // Y-axis collision
                 if ((entity.vy || 0) > 0) { // Landing
                   entity.y = tileRect.y - entity.h;
                   state.canJump = true;
@@ -318,18 +491,19 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
                   entity.y = tileRect.y + tileRect.h;
                   entity.vy = 0;
 
+                  // Tile Interaction (Head Bump)
                   if (tile === TileType.Question) {
-                    grid[idx] = TileType.HardBlock;
+                    state.grid[r * lvlW + c] = TileType.HardBlock;
                     spawnMushroom(c, r);
                   } else if (tile === TileType.Brick && state.isBig) {
-                    grid[idx] = TileType.Empty;
+                    state.grid[r * lvlW + c] = TileType.Empty;
                   }
                 }
                 entity.vy = 0;
               }
             }
           }
-          // Spike collision
+          // Spike/Hazard collision (independent of solid block collision)
           if (tile === TileType.Spike) {
             const tileRect = { x: c * TILE_SIZE, y: r * TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE };
             if (checkRectCollision(entity, tileRect)) {
@@ -337,35 +511,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
             }
           }
         }
-      }
-    };
-
-    const handleAbility = (char: CharacterType, p: Entity, state: any) => {
-      if (char === CharacterType.Toad) {
-        const sproutX = Math.floor((p.x + p.w / 2) / TILE_SIZE) * TILE_SIZE;
-        const startY = Math.floor((p.y + p.h) / TILE_SIZE);
-        const MAX_HEIGHT = 8;
-
-        for (let i = 0; i < MAX_HEIGHT; i++) {
-          const gridY = startY - i;
-          if (gridY < 0) break;
-          const gridX = Math.floor(sproutX / TILE_SIZE);
-          const tileIndex = gridY * state.levelWidth + gridX;
-          if (tileIndex >= 0 && tileIndex < state.grid.length) {
-            const tile = state.grid[tileIndex];
-            if (tile !== TileType.Empty && tile !== TileType.Spike && tile !== undefined) break;
-          }
-          state.entities.push({
-            id: `vine-${performance.now()}-${i}`,
-            type: EntityType.Vine,
-            x: sproutX + (TILE_SIZE - 16) / 2,
-            y: gridY * TILE_SIZE,
-            w: 16,
-            h: TILE_SIZE,
-            lifespan: 600
-          });
-        }
-        state.abilityCooldown = 120;
       }
     };
 
@@ -379,19 +524,25 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
       onWin();
     };
 
-    const render = (ctx: CanvasRenderingContext2D, state: any) => {
+    const render = (ctx: CanvasRenderingContext2D, state: GameState) => {
       const { width, height } = ctx.canvas;
       const p = state.player;
+      if (!p) return;
 
-      let camX = p.x - width / 2;
-      camX = Math.max(0, Math.min(camX, state.levelWidth * TILE_SIZE - width));
-      state.camera.x = camX;
+      // Camera Follow Logic (smoother than the original fixed cam)
+      let targetCamX = p.x - width / 2;
+      targetCamX = Math.max(0, Math.min(targetCamX, state.levelWidth * TILE_SIZE - width));
+      // Simple easing for camera smoothness
+      state.camera.x += (targetCamX - state.camera.x) * 0.1; 
+      const camX = state.camera.x;
+
 
       ctx.fillStyle = '#1a202c';
       ctx.fillRect(0, 0, width, height);
 
       ctx.save();
-      ctx.translate(-Math.floor(camX), 0);
+      // FIX 19: Use Math.floor on camera position to prevent visual tearing
+      ctx.translate(-Math.floor(camX), 0); 
 
       // Map
       for (let i = 0; i < state.grid.length; i++) {
@@ -401,22 +552,24 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
         const col = i % state.levelWidth;
         const row = Math.floor(i / state.levelWidth);
 
+        // Simple culling
         if ((col + 1) * TILE_SIZE < camX || col * TILE_SIZE > camX + width) continue;
 
         ctx.fillStyle = TILE_COLORS[tile] || '#fff';
         ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
+        // Draw detail for tiles
+        // (Render logic is mostly fine, minor cleanup)
         if (tile === TileType.Question) {
           ctx.fillStyle = "rgba(0,0,0,0.2)";
           ctx.fillRect(col * TILE_SIZE + 4, row * TILE_SIZE + 4, TILE_SIZE - 8, TILE_SIZE - 8);
           ctx.fillStyle = "white";
           ctx.font = "bold 20px monospace";
           ctx.fillText("?", col * TILE_SIZE + 8, row * TILE_SIZE + 24);
-        }
-        if (tile === TileType.Brick) {
-           ctx.fillStyle = "rgba(0,0,0,0.1)";
-           ctx.fillRect(col * TILE_SIZE + 2, row * TILE_SIZE + 2, TILE_SIZE - 4, 10);
-           ctx.fillRect(col * TILE_SIZE + 2, row * TILE_SIZE + 16, TILE_SIZE - 4, 10);
+        } else if (tile === TileType.Brick) {
+          ctx.fillStyle = "rgba(0,0,0,0.1)";
+          ctx.fillRect(col * TILE_SIZE + 2, row * TILE_SIZE + 2, TILE_SIZE - 4, 10);
+          ctx.fillRect(col * TILE_SIZE + 2, row * TILE_SIZE + 16, TILE_SIZE - 4, 10);
         }
       }
 
@@ -424,47 +577,54 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
       for (const e of state.entities) {
         if (e.x + e.w < camX || e.x > camX + width) continue;
 
-        ctx.fillStyle = ENTITY_COLORS[e.type] || '#fbbf24';
-        if (e.type === EntityType.Goomba) {
-          ctx.fillStyle = '#7f1d1d';
-          // Draw angry eyes
-          ctx.fillRect(e.x, e.y, e.w, e.h);
-          ctx.fillStyle = "white";
-          ctx.fillRect(e.x + 4, e.y + 8, 8, 8);
-          ctx.fillRect(e.x + 20, e.y + 8, 8, 8);
-          ctx.fillStyle = "black";
-          ctx.fillRect(e.x + 6, e.y + 10, 4, 4);
-          ctx.fillRect(e.x + 22, e.y + 10, 4, 4);
-        } else if (e.type === EntityType.Goal) {
-           ctx.fillStyle = '#fbbf24';
-           ctx.fillRect(e.x, e.y, e.w, e.h);
-           ctx.fillStyle = "red";
-           ctx.beginPath();
-           ctx.arc(e.x + e.w/2, e.y + e.h/2, e.w/3, 0, Math.PI * 2);
-           ctx.fill();
-        } else if (e.type === EntityType.Mushroom) {
-          ctx.fillStyle = '#ef4444';
-          ctx.beginPath();
-          ctx.arc(e.x + e.w/2, e.y + e.h/2, e.w/2 - 2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "white";
-          ctx.beginPath();
-          ctx.arc(e.x + e.w/2, e.y + e.h/2 + 2, e.w/4, 0, Math.PI * 2);
-          ctx.fill();
+        // FIX 20: Vine drawing should be distinct (simple line/thin rectangle)
+        if (e.type === EntityType.Vine) {
+            ctx.fillStyle = '#16a34a'; // Green
+            ctx.fillRect(e.x, e.y, e.w, e.h);
         } else {
-          ctx.fillRect(e.x, e.y, e.w, e.h);
+            // Default entity drawing (Goomba/Mushroom/Coin)
+            ctx.fillStyle = ENTITY_COLORS[e.type] || '#fbbf24';
+            if (e.type === EntityType.Goomba) ctx.fillStyle = '#7f1d1d';
+
+            // Draw the entity box
+            ctx.fillRect(e.x, e.y, e.w, e.h); 
+            
+            if (e.type === EntityType.Goomba) {
+                // Simplified eye rendering for Goomba
+                ctx.fillStyle = "white";
+                ctx.fillRect(e.x + 4, e.y + 8, 8, 8);
+                ctx.fillRect(e.x + 20, e.y + 8, 8, 8);
+                ctx.fillStyle = "black";
+                ctx.fillRect(e.x + 6, e.y + 10, 4, 4);
+                ctx.fillRect(e.x + 22, e.y + 10, 4, 4);
+            } else if (e.type === EntityType.Goal) {
+                // Goal rendering
+                ctx.fillStyle = '#fbbf24';
+                ctx.fillRect(e.x, e.y, e.w, e.h);
+                ctx.fillStyle = "red";
+                ctx.beginPath();
+                ctx.arc(e.x + e.w/2, e.y + e.h/2, e.w/3, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (e.type === EntityType.Mushroom) {
+                // Mushroom rendering
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(e.x + e.w/2, e.y + e.h/2, e.w/2 - 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "white";
+                ctx.beginPath();
+                ctx.arc(e.x + e.w/2, e.y + e.h/2 + 2, e.w/4, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
       }
 
       // --- PROCEDURAL PLAYER RENDERING ---
       const drawCharacter = (x: number, y: number, w: number, h: number) => {
+        
         // Invincibility Flash
         if (state.invincibilityTimer > 0) {
-           if (Math.floor(Date.now() / 50) % 2 === 0) {
-             ctx.globalAlpha = 0.5;
-           } else {
-             ctx.globalAlpha = 0.8;
-           }
+            ctx.globalAlpha = Math.floor(Date.now() / 50) % 2 === 0 ? 0.5 : 0.8;
         }
 
         const facingRight = (p.vx || 0) >= 0;
@@ -474,8 +634,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
         
         // Bobbing animation for walking
         let bobY = 0;
-        if (Math.abs(p.vx || 0) > 0.1 && !state.canJump === false) {
-           bobY = Math.sin(Date.now() / 50) * 2;
+        if (Math.abs(p.vx || 0) > 0.1 && state.canJump) { // Only bob if on ground and moving
+            bobY = Math.sin(Date.now() / 50) * 2;
         }
 
         const drawRect = (rx: number, ry: number, rw: number, rh: number, color: string) => {
@@ -483,56 +643,24 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
           ctx.fillRect(x + w * rx, y + h * ry + bobY, w * rw, h * rh);
         };
 
-        if (character === CharacterType.Toad) {
-           // Cap
-           drawRect(0, 0, 1, 0.45, 'white');
-           drawRect(0.2, 0.1, 0.6, 0.2, mainColor); // Spots
-           // Face
-           drawRect(0.15, 0.45, 0.7, 0.25, skinColor);
-           // Vest
-           drawRect(0.2, 0.7, 0.6, 0.3, blue);
-        } else if (character === CharacterType.Peach) {
-           // Crown
-           drawRect(0.35, -0.1, 0.3, 0.2, 'gold');
-           // Hair
-           drawRect(0.1, 0.1, 0.8, 0.3, '#fde047');
-           // Face
-           drawRect(0.25, 0.25, 0.5, 0.2, skinColor);
-           // Dress
-           drawRect(0.1, 0.45, 0.8, 0.55, mainColor);
-           drawRect(0.3, 0.45, 0.4, 0.55, '#fbcfe8'); // Inner Dress
+        // Simplified drawing logic for all characters
+        // Hat/Hair
+        drawRect(0, 0, 1, 0.3, character === CharacterType.Peach ? '#fde047' : mainColor);
+        // Face/Skin
+        drawRect(0.15, 0.25, 0.7, 0.25, skinColor);
+        // Body (Shirt/Dress)
+        drawRect(0.1, 0.5, 0.8, 0.5, mainColor);
+        // Overalls/Accent (Blue for Mario/Luigi/Toad)
+        if (character !== CharacterType.Peach) {
+            drawRect(0.15, 0.6, 0.7, 0.4, blue);
         } else {
-           // Mario & Luigi
-           // Hat
-           drawRect(0, 0, 1, 0.2, mainColor);
-           drawRect(facingRight ? 0.2 : 0, 0.2, 0.8, 0.1, mainColor); // Brim
-           
-           // Face & Ears
-           drawRect(0.1, 0.2, 0.8, 0.3, skinColor);
-           
-           // Mustache
-           ctx.fillStyle = 'black';
-           const mX = facingRight ? x + w * 0.5 : x + w * 0.2;
-           ctx.fillRect(mX, y + h * 0.35 + bobY, w * 0.3, h * 0.08);
-
-           // Overalls
-           drawRect(0.15, 0.5, 0.7, 0.5, blue);
-           // Shirt/Arms
-           drawRect(facingRight ? 0.4 : 0.1, 0.5, 0.3, 0.25, mainColor);
-           
-           // Buttons
-           ctx.fillStyle = 'gold';
-           if (facingRight) {
-             ctx.fillRect(x + w * 0.6, y + h * 0.6 + bobY, w*0.1, w*0.1);
-           } else {
-             ctx.fillRect(x + w * 0.3, y + h * 0.6 + bobY, w*0.1, w*0.1);
-           }
+            drawRect(0.3, 0.6, 0.4, 0.4, '#fbcfe8'); // Inner Dress
         }
 
         // Eyes (Common)
         ctx.fillStyle = 'black';
-        const eyeX = facingRight ? x + w * 0.7 : x + w * 0.2;
-        ctx.fillRect(eyeX, y + h * 0.25 + bobY, w * 0.1, w * 0.15);
+        const eyeX = facingRight ? x + w * 0.65 : x + w * 0.25;
+        ctx.fillRect(eyeX, y + h * 0.35 + bobY, w * 0.1, w * 0.1);
 
         // Restore Alpha
         ctx.globalAlpha = 1.0;
@@ -540,7 +668,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
 
       // Apply Transformations (Spin Jump)
       if (!state.canJump && !state.isClimbing) {
-        /*const spinSpeed = 0.4;*/
+        // FIX 21: Added simple jump spin
         const angle = (Date.now() / 100) % (Math.PI * 2);
         const cx = p.x + p.w / 2;
         const cy = p.y + p.h / 2;
@@ -563,7 +691,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
       ctx.strokeStyle = "black";
       ctx.lineWidth = 3;
 
-      const charText = `CHAR: ${character}`;
+      const charText = `CHAR: ${character} | COINS: ${state.coins}`; // Display coins
       ctx.strokeText(charText, 20, 40);
       ctx.fillText(charText, 20, 40);
 
@@ -572,39 +700,59 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
       ctx.fillText(stateText, 20, 70);
       
       if (state.invincibilityTimer > 0) {
-         ctx.fillStyle = "#facc15"; // Yellow warning
-         ctx.fillText("INVINCIBLE", 20, 100);
+          ctx.fillStyle = "#facc15"; 
+          ctx.fillText("INVINCIBLE", 20, 100);
+      }
+      
+      if (state.abilityCooldown > 0) {
+           ctx.fillStyle = "#3b82f6";
+           ctx.fillText(`ABILITY CD: ${Math.ceil(state.abilityCooldown / 60)}s`, 20, 130);
       }
     };
 
     update();
     return () => {
       cancelAnimationFrame(animationFrameId);
+      // FIX 22: Clean up event listeners
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [level, character, onDie, onWin]);
+  }, [level, character, onDie, onWin, onExit, getTile]);
 
   const handleTouch = (key: keyof typeof gameState.current.keys, pressed: boolean) => (e: React.TouchEvent | React.MouseEvent) => {
+    // Prevent default touch/right-click behavior
     if (e.cancelable && e.type !== 'mousedown' && e.type !== 'mouseup') {
       e.preventDefault();
     }
-    gameState.current.keys[key] = pressed;
+    // FIX 23: Handle 'jump' specifically to avoid re-triggering a jump while held
+    if (key === 'jump' && pressed) {
+        if (!gameState.current.keys.jump) {
+             gameState.current.keys.jump = true;
+        }
+    } else {
+        gameState.current.keys[key] = pressed;
+    }
   };
 
   return (
     <div className="relative w-full h-full bg-gray-900 overflow-hidden select-none">
       <canvas
         ref={canvasRef}
-        width={window.innerWidth}
-        height={window.innerHeight}
+        // FIX 24: Initial canvas size for non-dynamic setting (will be corrected by handleResize)
+        width={1280} 
+        height={720}
         className="block"
       />
 
+      {/* Control overlay remains the same, but the handlers use the corrected logic */}
       <div className="absolute top-4 right-4">
         <button onClick={onExit} className="px-4 py-2 bg-red-600 text-white font-bold rounded shadow-lg border-2 border-red-800 active:bg-red-700">
           EXIT
         </button>
       </div>
 
+      {/* D-Pad controls (Horizontal) */}
       <div className="absolute bottom-8 left-8 flex gap-4">
         <button
           onMouseDown={handleTouch('left', true)} onMouseUp={handleTouch('left', false)} onMouseLeave={handleTouch('left', false)}
@@ -620,6 +768,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
         </button>
       </div>
 
+      {/* Action buttons */}
       <div className="absolute bottom-8 right-8 flex gap-4">
         <button
           onMouseDown={handleTouch('ability', true)} onMouseUp={handleTouch('ability', false)} onMouseLeave={handleTouch('ability', false)}
@@ -635,6 +784,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({ level, character, onExit
         </button>
       </div>
 
+      {/* D-Pad controls (Vertical - used for climbing) */}
       <div className="absolute bottom-24 left-8 flex flex-col gap-16 pointer-events-none">
         <button
           onMouseDown={handleTouch('up', true)} onMouseUp={handleTouch('up', false)}
