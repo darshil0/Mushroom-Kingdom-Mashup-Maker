@@ -32,10 +32,16 @@ const App = () => {
       const parsed = parseLevelLayout(generated.layout);
       
       // Ensure parsed data matches editor dimensions
+      const desiredLength = EDITOR_ROWS * EDITOR_COLS;
+      const gridSlice = parsed.grid.slice(0, desiredLength);
+      // Manually pad array if it's shorter than the editor dimensions
+      while (gridSlice.length < desiredLength) {
+        gridSlice.push(0); // TileType.Empty = 0
+      }
       setLevel({
         width: EDITOR_COLS,
         height: EDITOR_ROWS,
-        grid: parsed.grid.slice(0, EDITOR_ROWS * EDITOR_COLS).padEnd(EDITOR_ROWS * EDITOR_COLS, '.'),
+        grid: gridSlice,
         entities: parsed.entities,
         startPos: {
           x: Math.max(0, Math.min(parsed.startPos.x, EDITOR_COLS - 1)),
@@ -185,8 +191,8 @@ const App = () => {
             <div>
               <ul className="space-y-2 list-disc pl-5">
                 <li><strong>Game:</strong> Arrow Keys to Move</li>
-                <li><strong>Jump:</strong> 'A' or Spacebar</li>
-                <li><strong>Ability:</strong> 'POW' key</li>
+                <li><strong>Jump:</strong> &apos;A&apos; or Spacebar</li>
+                <li><strong>Ability:</strong> &apos;POW&apos; key</li>
               </ul>
             </div>
           </div>
