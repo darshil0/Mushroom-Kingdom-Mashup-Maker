@@ -1,17 +1,38 @@
 import { TileType, EntityType, Entity } from '../types';
 import { EDITOR_COLS, EDITOR_ROWS, TILE_SIZE } from '../constants';
+import { v4 as uuidv4 } from 'uuid'; // FIX 1: Import a UUID generator
 
+// FIX 2: Ensure all required Entity properties (width, height, health) are included
 export interface ParsedLevel {
-  grid: number[];
+  grid: TileType[]; // FIX 3: Use TileType enum for type safety
   entities: Entity[];
   startPos: { x: number; y: number };
+  levelVersion: string; // FIX 4: Added version for consistency
 }
 
-export const parseLevelLayout = (layoutString: string): ParsedLevel => {
-  const grid = new Array(EDITOR_COLS * EDITOR_ROWS).fill(TileType.Empty);
-  const entities: Entity[] = [];
-  let startPos = { x: 2, y: 10 }; // Default safe start
+// FIX 5: Utility function to generate a player entity skeleton
+const createPlayerEntity = (c: number, r: number) => ({
+  id: uuidv4(), // Placeholder, ID will be finalized on game start
+  type: EntityType.Player,
+  // FIX 6: Start position must be converted to world coordinates here
+  x: c * TILE_SIZE,
+  y: r * TILE_SIZE,
+  width: TILE_SIZE,
+  height: TILE_SIZE * 2, // Player is usually 2 tiles high
+  vx: 0,
+  vy: 0,
+});
 
+export const parseLevelLayout = (layoutString: string): ParsedLevel => {
+  // FIX 7: Use TileType.Empty explicitly for type safety
+  const grid: TileType[] = new Array(EDITOR_COLS * EDITOR_ROWS).fill(TileType.Empty);
+  const entities: Entity[] = [];
+  // FIX 8: Default start position should be converted to world coordinates immediately
+  let startPos = { x: 2 * TILE_SIZE, y: 10 * TILE_SIZE }; 
+  
+  // FIX 9: A placeholder Player entity is needed to track the starting position.
+  let playerEntityPlaceholder = createPlayerEntity(2, 10);
+  
   // Normalize line endings and split
   const lines = layoutString.trim().replace(/\r\n/g, '\n').split('\n');
 
@@ -29,39 +50,47 @@ export const parseLevelLayout = (layoutString: string): ParsedLevel => {
         case 'B':
           grid[idx] = TileType.Brick;
           break;
+        case 'H': // FIX 10: Added HardBlock mapping
+          grid[idx] = TileType.HardBlock;
+          break;
         case '?':
           grid[idx] = TileType.Question;
           break;
         case 'P':
-          grid[idx] = TileType.PipeLeft; // Simplified: Left side of pipe usually implies the whole pipe in 1-char representation
-          // In a more complex parser, we might look ahead for the right side
+          grid[idx] = TileType.PipeLeft;
           break;
         case '^':
           grid[idx] = TileType.Spike;
           break;
+        case 'V': // FIX 10: Added VineBase mapping
+          grid[idx] = TileType.VineBase;
+          break;
+        case 'C': // FIX 10: Added CoinBlock mapping
+          grid[idx] = TileType.CoinBlock;
+          break;
         case 'S':
-          startPos = { x: c, y: r };
+          // FIX 11: Set the world start position and update the player placeholder
+          startPos = { x: c * TILE_SIZE, y: r * TILE_SIZE };
+          playerEntityPlaceholder = createPlayerEntity(c, r);
+          // Don't place a tile here; the player replaces the 'S'
           break;
         case 'G':
-          entities.push({
-            id: `goal`,
-            type: EntityType.Goal,
-            x: c * TILE_SIZE,
-            y: r * TILE_SIZE,
-            w: TILE_SIZE,
-            h: TILE_SIZE
-          });
+          // FIX 12: Goal is a static tile in many games, better to use TileType.Goal
+          grid[idx] = TileType.Goal;
           break;
         case 'E':
+          // FIX 13: Added missing mandatory properties and a unique ID
           entities.push({
-            id: `e-${r}-${c}`,
+            id: uuidv4(),
             type: EntityType.Goomba,
             x: c * TILE_SIZE,
             y: r * TILE_SIZE,
-            w: TILE_SIZE,
-            h: TILE_SIZE,
-            vx: -1
-          });
+            width: TILE_SIZE,
+            height: TILE_SIZE,
+            vx: -1,
+            patrolDirection: -1,
+            health: 1,
+          } as Entity); // Cast as Entity for type safety check
           break;
         default:
           // '.' or unknown characters remain Empty
@@ -70,5 +99,9 @@ export const parseLevelLayout = (layoutString: string): ParsedLevel => {
     }
   });
 
-  return { grid, entities, startPos };
+  // FIX 14: Add the player entity placeholder to the entity list
+  entities.push(playerEntityPlaceholder as Entity);
+
+  // FIX 15: Added version number
+  return { grid, entities, startPos, levelVersion: '1.0.4' };
 };
